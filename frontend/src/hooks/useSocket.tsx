@@ -23,7 +23,7 @@ export function useSocket() {
   });
   
   useEffect(() => {
-    const newSocket = io("http://localhost:3000");
+    const newSocket = io("https://mafia-app-7s20.onrender.com");
     setSocket(newSocket);
     
     return () => {
