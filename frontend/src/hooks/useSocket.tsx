@@ -59,7 +59,7 @@ export function useSocket() {
           ...prev.messages,
           {
             sender: 'System',
-            message: `Game created! Share this code with friends: ${gameId}`,
+            message: `Chat created! Share this code with friends: ${gameId}`,
             id: 'system',
             isSystem: true
           }
@@ -68,10 +68,10 @@ export function useSocket() {
       
       navigator.clipboard.writeText(gameId)
         .then(() => {
-          addSystemMessage(`Game code ${gameId} copied to clipboard!`);
+          addSystemMessage(`Chat code ${gameId} copied to clipboard!`);
         })
         .catch(() => {
-          addSystemMessage(`Your game code is: ${gameId}`);
+          addSystemMessage(`Your chat code is: ${gameId}`);
         });
     });
     
