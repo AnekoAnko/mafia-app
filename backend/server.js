@@ -2,18 +2,12 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/users.js';
 
 const app = express();
 
 app.use(express.json());
 
 const apiRouter = express.Router();
-
-
-apiRouter.use('/api/auth', authRoutes);
-apiRouter.use('/api/users', userRoutes);
 
 app.use('/api', apiRouter);
 
