@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useSocket } from './hooks/useSocket';
 import LoginScreen from './components/Login';
-import GameHeader from './components/GameHeader';
-import PlayerList from './components/PlayerList';
+import Header from './components/Header';
+import MembersList from './components/MembersList';
 import ChatArea from './components/ChatArea';
-import PhaseInfo from './components/PhaseInfo';
+import useMobile from './hooks/useMobile';
 
 const App = () => {
   const [username, setUsername] = useState('');
@@ -20,6 +20,8 @@ const App = () => {
     joinGame,
     sendMessage,
   } = useSocket();
+
+  const isMobile = useMobile();
   
   const handleCreateGame = () => {
     createGame(username);
@@ -52,7 +54,7 @@ const App = () => {
   
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <GameHeader
+      <Header
         gameId={gameState.gameId}
       />
       
@@ -63,12 +65,14 @@ const App = () => {
       )}
       
       <div className="flex flex-1 overflow-hidden">
-        <PlayerList 
-          players={gameState.players}
-          isHost={gameState.isHost}
-          started={gameState.started}
-          socketId={socket?.id}
-        />
+        {!isMobile && 
+          <MembersList 
+            players={gameState.players}
+            isHost={gameState.isHost}
+            started={gameState.started}
+            socketId={socket?.id}
+          />
+        }
         
         <ChatArea 
           messages={gameState.messages}
@@ -76,19 +80,9 @@ const App = () => {
           setMessage={setMessage}
           sendMessage={handleSendMessage}
           socketId={socket?.id}
-          phase={gameState.phase}
-          roleTeam={gameState.role?.team}
         />
       </div>
       
-      <PhaseInfo 
-        phase={gameState.phase}
-        dayCount={gameState.dayCount}
-        timeLeft={gameState.timeLeft}
-        role={gameState.role}
-        votedFor={gameState.votedFor}
-        players={gameState.players}
-      />
     </div>
   );
 };

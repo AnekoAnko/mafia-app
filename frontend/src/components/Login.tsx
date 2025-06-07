@@ -23,17 +23,15 @@ const Login = ({
 }: LoginScreenProps) => {
   return (
     <div className="min-h-screen flex justify-center items-center">
-      {/* Left illustration panel */}
       <div
         className="hidden lg:flex  bg-cover bg-center"
         style={{ backgroundImage: "url('/chat-illustration.jpg')" }}
       />
 
-      {/* Right form panel */}
       <div className="flex flex-col justify-center w-full lg:w-1/2 px-8 py-12 bg-white">
         <h1 className="text-4xl font-bold text-indigo-600 mb-2">ВІДПРАВИЛА MESSAGE</h1>
         <p className="text-gray-500 mb-8">
-          {showJoinGame ? 'Sign In to your account' : 'Create a new account'}
+          {showJoinGame ? 'Долучитися до чату' : 'Створити новий чат'}
         </p>
 
         {error && (
@@ -43,25 +41,23 @@ const Login = ({
         )}
 
         <div className="space-y-5">
-          {/* Username / Email */}
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-              Username
+              Ім'я
             </label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
-              placeholder="your username"
+              placeholder="Ваше ім'я"
               className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
-          {/* Password field */}
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
+              Пароль
             </label>
             <input
               id="password"
@@ -73,22 +69,21 @@ const Login = ({
             />
           </div>
 
-          {/* Buttons */}
           <div className="space-y-4">
             {showJoinGame ? (
               <>
                 <button
                   onClick={joinGame}
                   disabled={!username || !gameIdInput}
-                  className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
+                  className="w-full py-2 cursor-pointer rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
                 >
-                  Sign In
+                  Долучитися до чату
                 </button>
                 <button
                   onClick={() => setShowJoinGame(false)}
-                  className="w-full py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
+                  className="w-full py-2 cursor-pointer rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
                 >
-                  Create Account
+                  Створити чат
                 </button>
               </>
             ) : (
@@ -96,15 +91,15 @@ const Login = ({
                 <button
                   onClick={createGame}
                   disabled={!username || !gameIdInput}
-                  className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
+                  className="w-full py-2 cursor-pointer rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
                 >
-                  Sign Up
+                  Створити чат
                 </button>
                 <button
                   onClick={() => setShowJoinGame(true)}
-                  className="w-full py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
+                  className="w-full py-2 cursor-pointer rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
                 >
-                  Already have an account?
+                  Долучитися до чату
                 </button>
               </>
             )}
