@@ -1,511 +1,504 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaClient } from '@prisma/client';
+import { PHASES, getPhaseDuration } from '../models/game.js';
+import { 
+  assignRoles, 
+  checkGameOver, 
+  getNextPhase, 
+  processNightActions, 
+  processVotes 
+} from '../controllers/gameController.js';
 
-const app = express();
-const server = createServer(app);
+const prisma = new PrismaClient();
+let io;
 
-const io = new Server(server, {
-  cors: {
-    origin: ['https://sent-message-client.onrender.com'],
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
+// In-memory cache for active games to store temporary data
+const gameCache = new Map();
 
-const games = {};
-
-const ROLES = {
-  CIVILIAN: { name: 'Civilian', team: 'town', description: 'Survive and find the mafia' },
-  MAFIA: { name: 'Mafia', team: 'mafia', description: 'Eliminate the town' },
-  DOCTOR: { name: 'Doctor', team: 'town', description: 'Save one person each night' },
-  SHERIFF: { name: 'Sheriff', team: 'town', description: 'Investigate one person each night' }
-};
-
-const PHASES = {
-  LOBBY: 'lobby',
-  NIGHT: 'night',
-  DAY: 'day',
-  VOTING: 'voting',
-  RESULTS: 'results',
-  ENDED: 'ended'
-};
-
-function createGame(hostId, hostName) {
-  const gameId = uuidv4().substring(0, 6).toUpperCase();
-  
-  games[gameId] = {
-    id: gameId,
-    host: hostId,
-    players: [{
-      id: hostId,
-      name: hostName,
-      isAlive: true,
-      role: null,
-      votedFor: null
-    }],
-    started: false,
-    phase: PHASES.LOBBY,
-    timeLeft: 0,
-    dayCount: 0,
-    votes: {},
-    actions: {},
-    protectedPlayer: null,
-    investigatedPlayer: null,
-    mafiaTarget: null,
-    messages: [],
-    lastKilled: null,
-    timer: null
-  };
-  
-  return gameId;
-}
-
-function assignRoles(gameId) {
-  const game = games[gameId];
-  const players = [...game.players];
-  
-  for (let i = players.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [players[i], players[j]] = [players[j], players[i]];
+function getGameCache(gameId) {
+  if (!gameCache.has(gameId)) {
+    gameCache.set(gameId, {
+      timer: null,
+      timeLeft: 0,
+      actions: {},
+      mafiaTarget: null,
+      protectedPlayer: null,
+      investigatedPlayer: null,
+      lastKilled: null
+    });
   }
-  
-  const playerCount = players.length;
-  let mafiaCount = Math.max(Math.floor(playerCount / 4), 1);
-  const doctorCount = 1;
-  const sheriffCount = 1;
-  const civilianCount = playerCount - mafiaCount - doctorCount - sheriffCount;
-  
-  let roleIndex = 0;
-  
-  for (let i = 0; i < mafiaCount; i++) {
-    players[roleIndex].role = ROLES.MAFIA;
-    roleIndex++;
-  }
-  
-  for (let i = 0; i < doctorCount; i++) {
-    players[roleIndex].role = ROLES.DOCTOR;
-    roleIndex++;
-  }
-  
-  for (let i = 0; i < sheriffCount; i++) {
-    players[roleIndex].role = ROLES.SHERIFF;
-    roleIndex++;
-  }
-  
-  for (let i = 0; i < civilianCount; i++) {
-    players[roleIndex].role = ROLES.CIVILIAN;
-    roleIndex++;
-  }
-  
-  game.players = players;
-}
-
-function checkGameOver(gameId) {
-  const game = games[gameId];
-  
-  const alivePlayers = game.players.filter(player => player.isAlive);
-  const aliveMafia = alivePlayers.filter(player => player.role.team === 'mafia').length;
-  const aliveTown = alivePlayers.filter(player => player.role.team === 'town').length;
-  
-  if (aliveMafia >= aliveTown) {
-    game.winner = 'mafia';
-    return true;
-  }
-  
-  if (aliveMafia === 0) {
-    game.winner = 'town';
-    return true;
-  }
-  
-  return false;
-}
-
-function getNextPhase(currentPhase, gameId) {
-  switch (currentPhase) {
-    case PHASES.LOBBY:
-      return PHASES.NIGHT;
-    case PHASES.NIGHT:
-      return PHASES.DAY;
-    case PHASES.DAY:
-      return PHASES.VOTING;
-    case PHASES.VOTING:
-      if (checkGameOver(gameId)) {
-        return PHASES.ENDED;
-      }
-      return PHASES.NIGHT;
-    case PHASES.RESULTS:
-      if (checkGameOver(gameId)) {
-        return PHASES.ENDED;
-      }
-      return PHASES.NIGHT;
-    default:
-      return PHASES.LOBBY;
-  }
-}
-
-function getPhaseDuration(phase) {
-  switch (phase) {
-    case PHASES.NIGHT:
-      return 30; 
-    case PHASES.DAY:
-      return 120; 
-    case PHASES.VOTING:
-      return 30; 
-    case PHASES.RESULTS:
-      return 10; 
-    default:
-      return 0;
-  }
+  return gameCache.get(gameId);
 }
 
 function startTimer(gameId) {
-  const game = games[gameId];
-  if (!game) return;
+  const cache = getGameCache(gameId);
   
-  clearInterval(game.timer);
+  clearInterval(cache.timer);
   
-  game.timeLeft = getPhaseDuration(game.phase);
-  game.timer = setInterval(() => {
-    game.timeLeft--;
+  cache.timeLeft = getPhaseDuration(PHASES.DAY); // Default phase duration
+  cache.timer = setInterval(() => {
+    cache.timeLeft--;
     
     io.to(gameId).emit('updateTimer', {
-      timeLeft: game.timeLeft,
-      phase: game.phase
+      timeLeft: cache.timeLeft,
+      phase: cache.phase || PHASES.DAY
     });
     
-    if (game.timeLeft <= 0) {
-      clearInterval(game.timer);
+    if (cache.timeLeft <= 0) {
+      clearInterval(cache.timer);
       progressGame(gameId);
     }
   }, 1000);
 }
 
-function processNightActions(gameId) {
-  const game = games[gameId];
-  game.lastKilled = null;
-  
-  let targetId = game.mafiaTarget;
-  const protectedId = game.protectedPlayer;
-
-  if (targetId && targetId !== protectedId) {
-    const targetPlayer = game.players.find(p => p.id === targetId);
-    if (targetPlayer) {
-      targetPlayer.isAlive = false;
-      game.lastKilled = targetPlayer;
+async function progressGame(gameId) {
+  try {
+    const game = await prisma.game.findUnique({
+      where: { gameId },
+      include: { players: true }
+    });
+    
+    if (!game) return;
+    
+    const cache = getGameCache(gameId);
+    
+    switch (game.phase) {
+      case PHASES.NIGHT:
+        await processNightActions(gameId, cache);
+        break;
+      case PHASES.VOTING:
+        await processVotes(gameId, cache);
+        break;
     }
-  }
-
-  game.protectedPlayer = null;
-  game.mafiaTarget = null;
-  game.investigatedPlayer = null;
-  game.actions = {};
-}
-
-function processVotes(gameId) {
-  const game = games[gameId];
-  
-  const voteCount = {};
-  
-  game.players.forEach(player => {
-    if (player.votedFor && player.isAlive) {
-      voteCount[player.votedFor] = (voteCount[player.votedFor] || 0) + 1;
+    
+    const nextPhase = getNextPhase(game.phase, gameId);
+    let updateData = { phase: nextPhase };
+    
+    if (nextPhase === PHASES.DAY) {
+      updateData.dayCount = game.dayCount + 1;
     }
-  });
-  
-  let maxVotes = 0;
-  let targetId = null;
-  
-  for (const [playerId, votes] of Object.entries(voteCount)) {
-    if (votes > maxVotes) {
-      maxVotes = votes;
-      targetId = playerId;
+    
+    await prisma.game.update({
+      where: { gameId },
+      data: updateData
+    });
+    
+    const phaseDuration = getPhaseDuration(nextPhase);
+    cache.timeLeft = phaseDuration;
+    
+    io.to(gameId).emit('phaseChange', {
+      phase: nextPhase,
+      dayCount: updateData.dayCount || game.dayCount,
+      duration: phaseDuration,
+      lastKilled: cache.lastKilled,
+      gameOver: nextPhase === PHASES.ENDED,
+      winner: game.winner
+    });
+    
+    if (phaseDuration > 0) {
+      startTimer(gameId);
     }
-  }
-  
-  const tiedPlayers = Object.entries(voteCount).filter(([_, votes]) => votes === maxVotes);
-  
-  if (tiedPlayers.length > 1 || maxVotes === 0) {
-    game.lastKilled = null;
-  } else if (targetId) {
-    const targetPlayer = game.players.find(p => p.id === targetId);
-    if (targetPlayer) {
-      targetPlayer.isAlive = false;
-      game.lastKilled = targetPlayer;
-    }
-  }
-  
-  game.players.forEach(player => {
-    player.votedFor = null;
-  });
-}
-
-function progressGame(gameId) {
-  const game = games[gameId];
-  if (!game) return;
-  
-  switch (game.phase) {
-    case PHASES.NIGHT:
-      processNightActions(gameId);
-      break;
-    case PHASES.VOTING:
-      processVotes(gameId);
-      break;
-  }
-  
-  const nextPhase = getNextPhase(game.phase, gameId);
-  game.phase = nextPhase;
-  
-  if (nextPhase === PHASES.DAY) {
-    game.dayCount++;
-  }
-  
-  const phaseDuration = getPhaseDuration(nextPhase);
-  
-  io.to(gameId).emit('phaseChange', {
-    phase: game.phase,
-    dayCount: game.dayCount,
-    duration: phaseDuration,
-    lastKilled: game.lastKilled,
-    gameOver: game.phase === PHASES.ENDED,
-    winner: game.winner
-  });
-  
-  if (phaseDuration > 0) {
-    startTimer(gameId);
+  } catch (error) {
+    console.error('Error progressing game:', error);
   }
 }
 
-io.on('connection', (socket) => {
-  let currentGameId = null;
-  let player = null;
+function generateGameId() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 
-  socket.on('createGame', ({ username }) => {
-    const gameId = createGame(socket.id, username);
-    currentGameId = gameId;
-    
-    socket.join(gameId);
-    
-    player = {
-      id: socket.id,
-      name: username
-    };
-    
-    socket.emit('gameCreated', {
-      gameId,
-      players: games[gameId].players,
-      isHost: true
+function initialize(socketIo) {
+  io = socketIo;
+  
+  io.on('connection', (socket) => {
+    let currentGameId = null;
+    let currentPlayer = null;
+
+    socket.on('createGame', async ({ username }) => {
+      try {
+        const gameId = generateGameId();
+        
+        const game = await prisma.game.create({
+          data: {
+            gameId,
+            hostId: socket.id,
+            hostName: username,
+            phase: PHASES.LOBBY
+          }
+        });
+        
+        const player = await prisma.player.create({
+          data: {
+            playerId: socket.id,
+            name: username,
+            gameId: game.id
+          }
+        });
+        
+        currentGameId = gameId;
+        currentPlayer = player;
+        
+        socket.join(gameId);
+        
+        const players = await prisma.player.findMany({
+          where: { gameId: game.id }
+        });
+        
+        socket.emit('gameCreated', {
+          gameId,
+          players: players.map(p => ({
+            id: p.playerId,
+            name: p.name,
+            isAlive: p.isAlive
+          })),
+          isHost: true
+        });
+      } catch (error) {
+        console.error('Error creating game:', error);
+        socket.emit('error', { message: 'Failed to create game' });
+      }
     });
-  });
 
-  socket.on('joinGame', ({ gameId, username }) => {
-    const game = games[gameId];
-    
-    if (!game) {
-      socket.emit('error', { message: 'Game not found' });
-      return;
-    }
-    
-    if (game.started) {
-      socket.emit('error', { message: 'Game already started' });
-      return;
-    }
-    
-    socket.join(gameId);
-    currentGameId = gameId;
-    
-    player = {
-      id: socket.id,
-      name: username,
-      isAlive: true,
-      role: null,
-      votedFor: null
-    };
-    
-    game.players.push(player);
-    
-    io.to(gameId).emit('playerJoined', {
-      players: game.players,
-      newPlayer: player
-    });
-    
-    socket.emit('gameJoined', {
-      gameId,
-      players: game.players,
-      isHost: game.host === socket.id
-    });
-  });
-
-  socket.on('startGame', () => {
-    const game = games[currentGameId];
-    
-    if (!game || game.host !== socket.id) {
-      socket.emit('error', { message: 'Not authorized to start the game' });
-      return;
-    }
-    
-    if (game.players.length < 4) {
-      socket.emit('error', { message: 'Need at least 4 players to start' });
-      return;
-    }
-    
-    assignRoles(currentGameId);
-    
-    game.started = true;
-    game.phase = PHASES.NIGHT;
-    game.dayCount = 1;
-
-    game.players.forEach(player => {
-      io.to(player.id).emit('gameStarted', {
-        role: player.role,
-        players: game.players.map(p => ({
-          id: p.id,
+    socket.on('joinGame', async ({ gameId, username }) => {
+      try {
+        const game = await prisma.game.findUnique({
+          where: { gameId },
+          include: { players: true }
+        });
+        
+        if (!game) {
+          socket.emit('error', { message: 'Game not found' });
+          return;
+        }
+        
+        if (game.started) {
+          socket.emit('error', { message: 'Game already started' });
+          return;
+        }
+        
+        const player = await prisma.player.create({
+          data: {
+            playerId: socket.id,
+            name: username,
+            gameId: game.id
+          }
+        });
+        
+        socket.join(gameId);
+        currentGameId = gameId;
+        currentPlayer = player;
+        
+        const allPlayers = await prisma.player.findMany({
+          where: { gameId: game.id }
+        });
+        
+        const playerData = allPlayers.map(p => ({
+          id: p.playerId,
           name: p.name,
           isAlive: p.isAlive
-        }))
-      });
+        }));
+        
+        io.to(gameId).emit('playerJoined', {
+          players: playerData,
+          newPlayer: {
+            id: player.playerId,
+            name: player.name,
+            isAlive: player.isAlive
+          }
+        });
+        
+        socket.emit('gameJoined', {
+          gameId,
+          players: playerData,
+          isHost: game.hostId === socket.id
+        });
+      } catch (error) {
+        console.error('Error joining game:', error);
+        socket.emit('error', { message: 'Failed to join game' });
+      }
     });
-    
-    progressGame(currentGameId);
-  });
 
-  socket.on('sendMessage', ({ message }) => {
-    const game = games[currentGameId];
-    if (!game) return;
-    
-    const sender = game.players.find(p => p.id === socket.id);
-    if (!sender) return;
-    
-
-    if (game.phase === PHASES.DAY || game.phase === PHASES.LOBBY) {
-      io.to(currentGameId).emit('receiveMessage', {
-        sender: sender.name,
-        message,
-        id: socket.id,
-        isSystem: false
-      });
-    } else if (game.phase === PHASES.NIGHT && sender.role.team === 'mafia') {
-      game.players.forEach(player => {
-        if (player.role.team === 'mafia' && player.isAlive) {
-          io.to(player.id).emit('receiveMessage', {
-            sender: sender.name + ' (Mafia)',
-            message,
-            id: socket.id,
-            isMafiaChat: true
+    socket.on('startGame', async () => {
+      try {
+        const game = await prisma.game.findUnique({
+          where: { gameId: currentGameId },
+          include: { players: true }
+        });
+        
+        if (!game || game.hostId !== socket.id) {
+          socket.emit('error', { message: 'Not authorized to start the game' });
+          return;
+        }
+        
+        if (game.players.length < 4) {
+          socket.emit('error', { message: 'Need at least 4 players to start' });
+          return;
+        }
+        
+        // Assign roles and update players
+        const playersWithRoles = await assignRoles(game.id);
+        
+        await prisma.game.update({
+          where: { id: game.id },
+          data: {
+            started: true,
+            phase: PHASES.NIGHT,
+            dayCount: 1
+          }
+        });
+        
+        // Send role information to each player
+        for (const player of playersWithRoles) {
+          io.to(player.playerId).emit('gameStarted', {
+            role: JSON.parse(player.role),
+            players: playersWithRoles.map(p => ({
+              id: p.playerId,
+              name: p.name,
+              isAlive: p.isAlive
+            }))
           });
         }
-      });
-    }
-  });
-
-  socket.on('vote', ({ targetId }) => {
-    const game = games[currentGameId];
-    if (!game || game.phase !== PHASES.VOTING) return;
-    
-    const voter = game.players.find(p => p.id === socket.id);
-    const target = game.players.find(p => p.id === targetId);
-    
-    if (!voter || !voter.isAlive || !target || !target.isAlive) return;
-    
-    voter.votedFor = targetId;
-    
-    io.to(currentGameId).emit('playerVoted', {
-      voterId: socket.id,
-      voterName: voter.name,
-      targetId,
-      targetName: target.name
+        
+        progressGame(currentGameId);
+      } catch (error) {
+        console.error('Error starting game:', error);
+        socket.emit('error', { message: 'Failed to start game' });
+      }
     });
-  });
 
-  socket.on('nightAction', ({ targetId, action }) => {
-    const game = games[currentGameId];
-    if (!game || game.phase !== PHASES.NIGHT) return;
-    
-    const actor = game.players.find(p => p.id === socket.id);
-    const target = game.players.find(p => p.id === targetId);
-    
-    if (!actor || !actor.isAlive || !target || !target.isAlive) return;
-    
-    switch (action) {
-      case 'kill':
-        if (actor.role.team === 'mafia') {
-          game.mafiaTarget = targetId;
-          game.actions[socket.id] = { action, targetId };
-          
-          game.players.forEach(player => {
-            if (player.role.team === 'mafia' && player.isAlive && player.id !== socket.id) {
-              io.to(player.id).emit('mafiaAction', {
-                actorName: actor.name,
-                targetName: target.name
-              });
+    socket.on('sendMessage', async ({ message }) => {
+      try {
+        const game = await prisma.game.findUnique({
+          where: { gameId: currentGameId },
+          include: { players: true }
+        });
+        
+        if (!game) return;
+        
+        const sender = game.players.find(p => p.playerId === socket.id);
+        if (!sender) return;
+        
+        let messageType = 'PUBLIC';
+        let recipients = [];
+        
+        if (game.phase === PHASES.DAY || game.phase === PHASES.LOBBY) {
+          messageType = 'PUBLIC';
+          recipients = game.players.map(p => p.playerId);
+        } else if (game.phase === PHASES.NIGHT && sender.role) {
+          const role = JSON.parse(sender.role);
+          if (role.team === 'mafia') {
+            messageType = 'MAFIA';
+            recipients = game.players
+              .filter(p => p.role && JSON.parse(p.role).team === 'mafia' && p.isAlive)
+              .map(p => p.playerId);
+          }
+        }
+
+        console.log("CALL")
+        
+        if (recipients.length > 0) {
+          // Save message to database
+          await prisma.message.create({
+            data: {
+              content: message,
+              senderName: sender.name,
+              senderId: sender.playerId,
+              gameId: game.id,
+              messageType,
+              phase: game.phase,
+              dayCount: game.dayCount
             }
           });
-        }
-        break;
-      case 'protect':
-        if (actor.role.name === 'Doctor') {
-          game.protectedPlayer = targetId;
-          game.actions[socket.id] = { action, targetId };
-        }
-        break;
-      case 'investigate':
-        if (actor.role.name === 'Sheriff') {
-          game.investigatedPlayer = targetId;
-          game.actions[socket.id] = { action, targetId };
           
-          io.to(socket.id).emit('investigationResult', {
-            targetName: target.name,
-            isMafia: target.role.team === 'mafia'
+          // Send to recipients
+          recipients.forEach(playerId => {
+            io.to(playerId).emit('receiveMessage', {
+              sender: messageType === 'MAFIA' ? sender.name + ' (Mafia)' : sender.name,
+              message,
+              id: socket.id,
+              isMafiaChat: messageType === 'MAFIA'
+            });
           });
         }
-        break;
-    }
-    
-    socket.emit('actionConfirmed', { action, targetName: target.name });
-  });
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
+    });
 
-  socket.on('disconnect', () => {
-    if (!currentGameId) return;
-    
-    const game = games[currentGameId];
+    socket.on('vote', async ({ targetId }) => {
+      try {
+        const game = await prisma.game.findUnique({
+          where: { gameId: currentGameId },
+          include: { players: true }
+        });
+        
+        if (!game || game.phase !== PHASES.VOTING) return;
+        
+        const voter = game.players.find(p => p.playerId === socket.id);
+        const target = game.players.find(p => p.playerId === targetId);
+        
+        if (!voter || !voter.isAlive || !target || !target.isAlive) return;
+        
+        // Store vote in cache (votes are temporary during voting phase)
+        const cache = getGameCache(currentGameId);
+        if (!cache.votes) cache.votes = {};
+        cache.votes[socket.id] = targetId;
+        
+        io.to(currentGameId).emit('playerVoted', {
+          voterId: socket.id,
+          voterName: voter.name,
+          targetId,
+          targetName: target.name
+        });
+      } catch (error) {
+        console.error('Error processing vote:', error);
+      }
+    });
+
+    socket.on('nightAction', async ({ targetId, action }) => {
+      try {
+        const game = await prisma.game.findUnique({
+          where: { gameId: currentGameId },
+          include: { players: true }
+        });
+        
+        if (!game || game.phase !== PHASES.NIGHT) return;
+        
+        const actor = game.players.find(p => p.playerId === socket.id);
+        const target = game.players.find(p => p.playerId === targetId);
+        
+        if (!actor || !actor.isAlive || !target || !target.isAlive) return;
+        
+        const cache = getGameCache(currentGameId);
+        const actorRole = JSON.parse(actor.role);
+        
+        switch (action) {
+          case 'kill':
+            if (actorRole.team === 'mafia') {
+              cache.mafiaTarget = targetId;
+              cache.actions[socket.id] = { action, targetId };
+              
+              // Notify other mafia members
+              const mafiaPlayers = game.players.filter(p => 
+                p.role && JSON.parse(p.role).team === 'mafia' && 
+                p.isAlive && p.playerId !== socket.id
+              );
+              
+              mafiaPlayers.forEach(player => {
+                io.to(player.playerId).emit('mafiaAction', {
+                  actorName: actor.name,
+                  targetName: target.name
+                });
+              });
+            }
+            break;
+          case 'protect':
+            if (actorRole.name === 'Doctor') {
+              cache.protectedPlayer = targetId;
+              cache.actions[socket.id] = { action, targetId };
+            }
+            break;
+          case 'investigate':
+            if (actorRole.name === 'Sheriff') {
+              cache.investigatedPlayer = targetId;
+              cache.actions[socket.id] = { action, targetId };
+              
+              const targetRole = JSON.parse(target.role);
+              io.to(socket.id).emit('investigationResult', {
+                targetName: target.name,
+                isMafia: targetRole.team === 'mafia'
+              });
+            }
+            break;
+        }
+        
+        socket.emit('actionConfirmed', { action, targetName: target.name });
+      } catch (error) {
+        console.error('Error processing night action:', error);
+      }
+    });
+
+    socket.on('disconnect', async () => {
+  if (!currentGameId) return;
+
+  try {
+    const game = await prisma.game.findUnique({
+      where: { gameId: currentGameId },
+      include: { players: true }
+    });
+
     if (!game) return;
-    
-    const playerIndex = game.players.findIndex(p => p.id === socket.id);
-    if (playerIndex !== -1) {
-      game.players.splice(playerIndex, 1);
-      
-      if (game.host === socket.id && game.players.length > 0) {
-        game.host = game.players[0].id;
-      }
-      
-      io.to(currentGameId).emit('playerLeft', {
-        playerId: socket.id,
-        players: game.players,
-        newHost: game.host
+
+    // Знайти гравця, який відключився
+    const player = game.players.find(p => p.playerId === socket.id);
+    if (!player) return;
+
+    // Вилучити гравця з бази
+    await prisma.player.delete({
+      where: { playerId: socket.id }
+    });
+
+    // Оновити список гравців після видалення
+    const updatedPlayers = await prisma.player.findMany({
+      where: { gameId: game.id }
+    });
+
+    // Якщо відключився хост, передати хостство наступному гравцю (якщо є)
+    let newHostId = game.hostId;
+    if (game.hostId === socket.id && updatedPlayers.length > 0) {
+      newHostId = updatedPlayers[0].playerId;
+      await prisma.game.update({
+        where: { gameId: currentGameId },
+        data: { hostId: newHostId }
       });
-      
-      if (game.started) {
-        if (checkGameOver(currentGameId)) {
-          game.phase = PHASES.ENDED;
-          
-          io.to(currentGameId).emit('gameOver', {
-            winner: game.winner,
-            players: game.players
-          });
-          
-          clearInterval(game.timer);
-        }
-      }
-      
-      if (game.players.length === 0) {
-        clearInterval(game.timer);
-        delete games[currentGameId];
-      }
     }
-  });
+
+    io.to(currentGameId).emit('playerLeft', {
+      playerId: socket.id,
+      players: updatedPlayers.map(p => ({
+        id: p.playerId,
+        name: p.name,
+        isAlive: p.isAlive
+      })),
+      newHost: newHostId
+    });
+
+    // Перевірка на кінець гри (реалізуй у контролері)
+    if (game.started && await checkGameOver(currentGameId)) {
+      await prisma.game.update({
+        where: { gameId: currentGameId },
+        data: { phase: PHASES.ENDED }
+      });
+
+      io.to(currentGameId).emit('gameOver', {
+        winner: game.winner,
+        players: updatedPlayers
+      });
+
+      const cache = getGameCache(currentGameId);
+      clearInterval(cache.timer);
+    }
+
+    // Якщо нікого не залишилось — видалити гру з кеша і з БД
+    if (updatedPlayers.length === 0) {
+      const cache = getGameCache(currentGameId);
+      clearInterval(cache.timer);
+      gameCache.delete(currentGameId);
+
+      await prisma.game.delete({
+        where: { gameId: currentGameId }
+      });
+      console.log(`Game ${currentGameId} deleted from DB due to no players.`);
+    }
+  } catch (error) {
+    console.error('Error during disconnect cleanup:', error);
+  }
 });
 
-server.listen(3000, () => {
-  console.log('Server listening on port 3000');
-});
+  });
+}
+
+export default {
+  initialize,
+  startTimer,
+  progressGame
+};

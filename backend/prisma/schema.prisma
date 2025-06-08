@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Game {
+  id        String   @id @default(cuid())
+  gameId    String   @unique
+  hostId    String
+  hostName  String
+  started   Boolean  @default(false)
+  phase     String   @default("lobby")
+  dayCount  Int      @default(0)
+  winner    String?
+  createdAt DateTime @default(now())
+  endedAt   DateTime?
+  
+  players  Player[]
+  messages Message[]
+  
+  @@map("games")
+}
+
+model Player {
+  id       String  @id @default(cuid())
+  playerId String  @unique // socket.id must be unique
+  name     String
+  isAlive  Boolean @default(true)
+  role     String?
+  gameId   String
+  joinedAt DateTime @default(now())
+
+  game     Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("players")
+}
+
+model Message {
+  id          String      @id @default(cuid())
+  content     String
+  senderName  String
+  senderId    String
+  gameId      String
+  messageType MessageType @default(PUBLIC)
+  phase       String
+  dayCount    Int         @default(0)
+  createdAt   DateTime    @default(now())
+  
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [senderId], references: [playerId], onDelete: Cascade)
+  
+  @@map("messages")
+}
+
+enum MessageType {
+  PUBLIC    // Загальний чат (день, лоббі)
+  MAFIA     // Чат мафії (ніч)
+  SYSTEM    // Системні повідомлення
+}

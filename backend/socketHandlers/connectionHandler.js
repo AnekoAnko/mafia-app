@@ -99,12 +99,12 @@ function initialize(socketIo) {
       const game = games[gameId];
       
       if (!game) {
-        socket.emit('error', { message: 'Chat not found' });
+        socket.emit('error', { message: 'Game not found' });
         return;
       }
       
       if (game.started) {
-        socket.emit('error', { message: 'Chat already started' });
+        socket.emit('error', { message: 'Game already started' });
         return;
       }
       

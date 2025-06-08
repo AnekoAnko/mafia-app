@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useSocket } from './hooks/useSocket';
+import { PHASES } from './types/types';
 import LoginScreen from './components/Login';
-import Header from './components/Header';
-import MembersList from './components/MembersList';
+import GameHeader from './components/GameHeader';
+import PlayerList from './components/PlayerList';
 import ChatArea from './components/ChatArea';
-import useMobile from './hooks/useMobile';
+import PhaseInfo from './components/PhaseInfo';
 
 const App = () => {
   const [username, setUsername] = useState('');
@@ -18,10 +19,25 @@ const App = () => {
     gameState,
     createGame,
     joinGame,
+    startGame,
     sendMessage,
+    vote,
+    performNightAction,
+    getNightAction
   } = useSocket();
-
-  const isMobile = useMobile();
+  
+  const canPerformNightAction = () => {
+    if (!gameState.role) return false;
+    return (
+      gameState.phase === PHASES.NIGHT &&
+      gameState.role.name !== 'Civilian' &&
+      !gameState.nightActionDone
+    );
+  };
+  
+  const canVote = () => {
+    return gameState.phase === PHASES.VOTING && !gameState.votedFor;
+  };
   
   const handleCreateGame = () => {
     createGame(username);
@@ -54,8 +70,12 @@ const App = () => {
   
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <Header
+      <GameHeader
         gameId={gameState.gameId}
+        started={gameState.started}
+        role={gameState.role}
+        phase={gameState.phase}
+        timeLeft={gameState.timeLeft}
       />
       
       {error && (
@@ -65,14 +85,21 @@ const App = () => {
       )}
       
       <div className="flex flex-1 overflow-hidden">
-        {!isMobile && 
-          <MembersList 
-            players={gameState.players}
-            isHost={gameState.isHost}
-            started={gameState.started}
-            socketId={socket?.id}
-          />
-        }
+        <PlayerList 
+          players={gameState.players}
+          isHost={gameState.isHost}
+          started={gameState.started}
+          phase={gameState.phase}
+          socketId={socket?.id}
+          canVote={canVote}
+          canPerformNightAction={canPerformNightAction}
+          vote={vote}
+          votedFor={gameState.votedFor}
+          performNightAction={performNightAction}
+          getNightAction={getNightAction}
+          startGame={startGame}
+          winner={gameState.winner}
+        />
         
         <ChatArea 
           messages={gameState.messages}
@@ -80,9 +107,19 @@ const App = () => {
           setMessage={setMessage}
           sendMessage={handleSendMessage}
           socketId={socket?.id}
+          phase={gameState.phase}
+          roleTeam={gameState.role?.team}
         />
       </div>
       
+      <PhaseInfo 
+        phase={gameState.phase}
+        dayCount={gameState.dayCount}
+        timeLeft={gameState.timeLeft}
+        role={gameState.role}
+        votedFor={gameState.votedFor}
+        players={gameState.players}
+      />
     </div>
   );
 };
