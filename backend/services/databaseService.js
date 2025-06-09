@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Ініціалізація підключення до БД
 export async function initializeDatabase() {
   try {
     await prisma.$connect();
@@ -13,12 +12,10 @@ export async function initializeDatabase() {
   }
 }
 
-// Закриття підключення до БД
 export async function disconnectDatabase() {
   await prisma.$disconnect();
 }
 
-// Створення нової гри
 export async function createGameInDB(gameId, hostId, hostName) {
   try {
     const game = await prisma.game.create({
@@ -44,7 +41,6 @@ export async function createGameInDB(gameId, hostId, hostName) {
   }
 }
 
-// Додавання гравця до гри
 export async function addPlayerToDB(gameId, playerId, playerName) {
   try {
     const game = await prisma.game.findUnique({
@@ -70,7 +66,6 @@ export async function addPlayerToDB(gameId, playerId, playerName) {
   }
 }
 
-// Оновлення статусу гри
 export async function updateGameStatus(gameId, updates) {
   try {
     const game = await prisma.game.update({
@@ -84,7 +79,6 @@ export async function updateGameStatus(gameId, updates) {
   }
 }
 
-// Оновлення статусу гравця
 export async function updatePlayerStatus(playerId, updates) {
   try {
     const player = await prisma.player.update({
@@ -98,7 +92,6 @@ export async function updatePlayerStatus(playerId, updates) {
   }
 }
 
-// Збереження повідомлення
 export async function saveMessage(messageData) {
   try {
     const { content, senderName, senderId, gameId, messageType = 'PUBLIC', phase, dayCount } = messageData;
@@ -130,7 +123,6 @@ export async function saveMessage(messageData) {
   }
 }
 
-// Отримання повідомлень гри
 export async function getGameMessages(gameId, messageType = null) {
   try {
     const game = await prisma.game.findUnique({
@@ -171,7 +163,6 @@ export async function getGameMessages(gameId, messageType = null) {
   }
 }
 
-// Отримання гри з гравцями
 export async function getGameWithPlayers(gameId) {
   try {
     const game = await prisma.game.findUnique({
@@ -193,7 +184,6 @@ export async function getGameWithPlayers(gameId) {
   }
 }
 
-// Видалення гравця з гри
 export async function removePlayerFromDB(playerId) {
   try {
     await prisma.player.delete({
@@ -205,7 +195,6 @@ export async function removePlayerFromDB(playerId) {
   }
 }
 
-// Видалення гри
 export async function deleteGameFromDB(gameId) {
   try {
     await prisma.game.delete({
@@ -217,7 +206,6 @@ export async function deleteGameFromDB(gameId) {
   }
 }
 
-// Отримання статистики гравця
 export async function getPlayerStats(playerId) {
   try {
     const stats = await prisma.player.findMany({
