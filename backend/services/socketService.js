@@ -77,10 +77,10 @@ async function progressGame(gameId) {
     });
 
     killedSocket[0].leave(gameId);
-    console.log(game.lastKilled.id, "CHECK")
+
     io.to(gameId).emit('votedOut', {
       sender: 'System',
-      message: `${game.lastKilled.name} was voted out.`,
+      message: `${game.lastKilled.name} was killed.`,
       id: `system-${Date.now()}`,
       playerId: game.lastKilled.id
     });

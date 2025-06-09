@@ -19,7 +19,7 @@ export function getPhaseDuration(phase) {
     case PHASES.NIGHT:
       return 30; 
     case PHASES.DAY:
-      return 20; 
+      return 60; 
     case PHASES.VOTING:
       return 30; 
     case PHASES.RESULTS:
