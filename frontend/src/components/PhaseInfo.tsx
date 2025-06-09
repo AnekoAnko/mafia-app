@@ -43,7 +43,7 @@ const PhaseInfo = ({
         
         {phase === PHASES.DAY && (
           <div className="text-center">
-            <h2 className="text-lg font-semibold">Day {dayCount}</h2>
+            <h2 className="text-lg font-semibold">Day {dayCount-1}</h2>
             <p>Discuss who you think might be suspicious!</p>
             <p className="text-sm mt-1">Time remaining: {timeLeft}s</p>
           </div>

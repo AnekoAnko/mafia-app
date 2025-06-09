@@ -155,7 +155,7 @@ export function useSocket() {
           message = `Night ${dayCount} has begun. The town sleeps...`;
           break;
         case PHASES.DAY:
-          message = `Day ${dayCount} has begun. Discuss who might be suspicious!`;
+          message = `Day ${dayCount-1} has begun. Discuss who might be suspicious!`;
           if (lastKilled) {
             message = `${lastKilled.name} was killed during the night! ${message}`;
           } else {
