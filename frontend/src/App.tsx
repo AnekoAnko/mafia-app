@@ -48,7 +48,7 @@ const App = () => {
   };
   
   const handleSendMessage = () => {
-    sendMessage(message);
+    sendMessage(message, gameState.gameId);
     setMessage('');
   };
   

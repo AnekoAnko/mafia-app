@@ -23,7 +23,7 @@ const PhaseInfo = ({
   }
   
   return (
-    <div className="bg-gray-200 p-4">
+    <div className="bg-gray-800 opacity-[0.9] text-white p-4">
       <div className="max-w-4xl mx-auto">
         {phase === PHASES.NIGHT && (
           <div className="text-center">

@@ -22,7 +22,8 @@ const Login = ({
   setShowJoinGame
 }: LoginScreenProps) => {
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
+    
+    <div className="flex items-center justify-center h-screen bg-gray-700">
       <div className="p-6 bg-white shadow rounded space-y-4 w-full max-w-md">
         <h1 className="text-2xl font-bold text-center">Маfia Game</h1>
         
@@ -64,13 +65,13 @@ const Login = ({
                 <button
                   onClick={joinGame}
                   disabled={!username || !gameIdInput}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50 cursor-pointer"
                 >
                   Join Game
                 </button>
                 <button
                   onClick={() => setShowJoinGame(false)}
-                  className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded cursor-pointer"
                 >
                   Back
                 </button>
@@ -80,13 +81,13 @@ const Login = ({
                 <button
                   onClick={createGame}
                   disabled={!username}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50 cursor-pointer"
                 >
                   Create New Game
                 </button>
                 <button
                   onClick={() => setShowJoinGame(true)}
-                  className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded cursor-pointer"
                 >
                   Join Existing Game
                 </button>

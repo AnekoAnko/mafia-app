@@ -76,23 +76,23 @@ export function useSocket() {
     });
     
     socket.on('gameJoined', ({ gameId, players, isHost, messages }) => {
-  setGameState(prev => ({
-    ...prev,
-    gameId,
-    players,
-    isHost,
-    messages: [
-      ...messages,
-      {
-        sender: 'System',
-        message: `You joined game ${gameId}`,
-        id: 'system',
-        isSystem: true
-      }
-    ]
-  }));
-});
-
+      console.log(messages)
+      setGameState(prev => ({
+        ...prev,
+        gameId,
+        players,
+        isHost,
+        messages: [
+          ...messages,
+          {
+            sender: 'System',
+            message: `You joined game ${gameId}`,
+            id: 'system',
+            isSystem: true
+          }
+        ]
+      }));
+    });
     
     socket.on('playerJoined', ({ players, newPlayer }) => {
       setGameState(prev => ({
@@ -190,7 +190,48 @@ export function useSocket() {
         ]
       }));
     });
-    
+
+    socket.on('youDied', ({ message, playerId }) => {
+      setGameState(prev => ({
+        ...prev,
+        messages: [
+          ...prev.messages,
+          {
+            sender: 'System',
+            message,
+            id: `system-${Date.now()}`, 
+            isSystem: true
+          }
+        ],
+        players: prev.players.map(player =>
+          player.id === playerId
+            ? { ...player, isAlive: false }
+            : player
+        )
+      }));
+    });
+
+    socket.on('votedOut', ({ sender, message, id, playerId }) => {
+      console.log("CHECK",playerId)
+      setGameState(prev => ({
+        ...prev,
+        messages: [
+          ...prev.messages,
+          {
+            sender,
+            message,
+            id: id || `msg-${Date.now()}`,
+            isSystem: true
+          }
+        ],
+        players: prev.players.map(player =>
+          player.id === playerId
+            ? { ...player, isAlive: false }
+            : player
+        )
+      }));
+    });
+
     socket.on('updateTimer', ({ timeLeft, phase }) => {
       setGameState(prev => ({
         ...prev,
@@ -200,6 +241,7 @@ export function useSocket() {
     });
     
     socket.on('receiveMessage', (message: Message) => {
+      console.log(message)
       setGameState(prev => ({
         ...prev,
         messages: [...prev.messages, message]
@@ -338,9 +380,9 @@ export function useSocket() {
     socket.emit('startGame');
   };
   
-  const sendMessage = (message: string) => {
+  const sendMessage = (message: string, id: string | null) => {
     if (!socket || !message.trim()) return;
-    socket.emit('sendMessage', { message });
+    socket.emit('sendMessage', { message, id});
   };
   
   const vote = (targetId: string) => {

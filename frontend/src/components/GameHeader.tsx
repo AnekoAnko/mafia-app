@@ -11,7 +11,7 @@ interface GameHeaderProps {
 const GameHeader = ({ gameId, started, role, phase, timeLeft }:GameHeaderProps) => {
     console.log(gameId)
   return (
-    <div className="bg-indigo-600 text-white p-4">
+    <div className="bg-gray-800 opacity-[0.9] text-white p-4">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-xl font-bold">Mafia Game</h1>

@@ -7,113 +7,95 @@ export function getGames() {
   return games;
 }
 
-export async function createGame(hostId, hostName) {
+export function createGame(hostId, hostName) {
   const gameId = uuidv4().substring(0, 6).toUpperCase();
-
-  const game = await prisma.game.create({
-    data: {
-      id: gameId,
-      hostId,
-      hostName,
-      players: {
-        create: {
-          playerId: hostId,
-          name: hostName,
-        },
-      },
-    },
-    include: {
-      players: true,
-    },
-  });
-
-  return game;
+  
+  games[gameId] = {
+    id: gameId,
+    host: hostId,
+    players: [{
+      id: hostId,
+      name: hostName,
+      isAlive: true,
+      role: null,
+      votedFor: null
+    }],
+    started: false,
+    phase: PHASES.LOBBY,
+    timeLeft: 0,
+    dayCount: 0,
+    votes: {},
+    actions: {},
+    protectedPlayer: null,
+    investigatedPlayer: null,
+    mafiaTarget: null,
+    messages: [],
+    lastKilled: null,
+    timer: null
+  };
+  
+  return gameId;
 }
 
-export async function assignRoles(gameId) {
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    include: { players: true },
-  });
-
-  if (!game) throw new Error('Game not found');
-
+export function assignRoles(gameId) {
+  const game = games[gameId];
   const players = [...game.players];
-  // Перемішування гравців
+  
   for (let i = players.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [players[i], players[j]] = [players[j], players[i]];
   }
-
+  
   const playerCount = players.length;
-  const mafiaCount = Math.max(Math.floor(playerCount / 4), 1);
+  let mafiaCount = Math.max(Math.floor(playerCount / 4), 1);
   const doctorCount = 1;
   const sheriffCount = 1;
   const civilianCount = playerCount - mafiaCount - doctorCount - sheriffCount;
-
+  
   let roleIndex = 0;
 
   for (let i = 0; i < mafiaCount; i++) {
-    players[roleIndex].role = 'mafia';
+    players[roleIndex].role = ROLES.MAFIA;
     roleIndex++;
   }
-
+  
   for (let i = 0; i < doctorCount; i++) {
-    players[roleIndex].role = 'doctor';
+    players[roleIndex].role = ROLES.DOCTOR;
     roleIndex++;
   }
-
+  
   for (let i = 0; i < sheriffCount; i++) {
-    players[roleIndex].role = 'sheriff';
+    players[roleIndex].role = ROLES.SHERIFF;
     roleIndex++;
   }
-
+  
   for (let i = 0; i < civilianCount; i++) {
-    players[roleIndex].role = 'civilian';
+    players[roleIndex].role = ROLES.CIVILIAN;
     roleIndex++;
   }
-
-  // Оновлення ролей у базі даних
-  for (const player of players) {
-    await prisma.player.update({
-      where: { id: player.id },
-      data: { role: player.role },
-    });
-  }
-
-  return players;
+  
+  game.players = players;
 }
 
-export async function checkGameOver(gameId) {
-  const players = await prisma.player.findMany({
-    where: {
-      gameId,
-      isAlive: true,
-    },
-  });
-
-  const aliveMafia = players.filter(p => p.role === 'mafia').length;
-  const aliveTown = players.length - aliveMafia;
-
+export function checkGameOver(gameId) {
+  const game = games[gameId];
+  
+  const alivePlayers = game.players.filter(player => player.isAlive);
+  const aliveMafia = alivePlayers.filter(player => player.role.team === 'mafia').length;
+  const aliveTown = alivePlayers.filter(player => player.role.team === 'town').length;
+  
   if (aliveMafia >= aliveTown) {
-    await prisma.game.update({
-      where: { id: gameId },
-      data: { winner: 'mafia' },
-    });
+    game.winner = 'mafia';
     return true;
   }
-
+  
   if (aliveMafia === 0) {
-    await prisma.game.update({
-      where: { id: gameId },
-      data: { winner: 'town' },
-    });
+    game.winner = 'town';
     return true;
   }
-
+  
   return false;
 }
-
 
 export function getNextPhase(currentPhase, gameId) {
   switch (currentPhase) {

@@ -31,19 +31,20 @@ const PlayerList = ({
   startGame,
   winner
 }: PlayerListProps) => {
+  console.log(players)
   return (
-    <div className="w-1/4 bg-white p-4 border-r overflow-y-auto">
-      <h2 className="text-lg font-semibold mb-2">Players</h2>
+    <div className="w-1/4 bg-gray-800 p-4 border-r overflow-y-auto">
+      <h2 className="text-lg font-semibold mb-2 text-white">Players</h2>
       <ul className="space-y-2">
         {players.map(player => (
           <li 
             key={player.id}
-            className={`p-2 rounded ${
+            className={`p-2 rounded text-white ${
               !player.isAlive 
-                ? 'bg-gray-200 text-gray-500 line-through' 
+                ? 'bg-gray-500 text-gray-500 line-through' 
                 : player.id === socketId 
-                  ? 'bg-indigo-100' 
-                  : 'bg-white'
+                  ? 'bg-indigo-700' 
+                  : 'bg-gray-700'
             }`}
           >
             <div className="flex justify-between items-center">
@@ -56,10 +57,10 @@ const PlayerList = ({
               {canVote() && player.id !== socketId && player.isAlive && (
                 <button
                   onClick={() => vote(player.id)}
-                  className={`px-2 py-1 text-sm rounded ${
+                  className={`px-2 py-1 text-sm rounded cursor-pointer ${
                     votedFor === player.id
                       ? 'bg-red-500 text-white'
-                      : 'bg-gray-200 hover:bg-red-500 hover:text-white'
+                      : 'bg-gray-500 hover:bg-red-500 hover:text-white'
                   }`}
                 >
                   Vote
@@ -70,7 +71,7 @@ const PlayerList = ({
                 ((player.id !== socketId) || (getNightAction() === 'protect')) && (
                   <button
                     onClick={() => performNightAction(player.id, getNightAction() || '')}
-                    className="px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+                    className="px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer"
                   >
                     {getNightAction() === 'kill' && 'Kill'}
                     {getNightAction() === 'protect' && 'Protect'}
@@ -93,7 +94,7 @@ const PlayerList = ({
         <button
           onClick={startGame}
           disabled={players.length < 4}
-          className="mt-4 w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded disabled:opacity-50"
+          className="mt-4 w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded disabled:opacity-50 cursor-pointer"
         >
           Start Game {players.length < 4 && `(Need ${4 - players.length} more)`}
         </button>
